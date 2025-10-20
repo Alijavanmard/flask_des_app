@@ -1,3 +1,4 @@
+#`python
 # -----------------------------------------------
 # app.py — Final Stable Release For AliAkbar
 # رمزنگاری DES با پنج مود عملیاتی (ECB، CBC، CFB، OFB، CTR)
@@ -52,11 +53,16 @@ def index():
 def process():
     data = request.get_json(force=True) if request.is_json else request.form
 
+    # ✅ پاک‌سازی ورودی دورها (رفع مشکل ^22، ٢٢ و ...)
+    raw_rounds = str(data.get("rounds", "16")).strip()
+    raw_rounds = re.sub(r"\D", "", raw_rounds)  # حذف هر کاراکتر غیرعددی
+    rounds_value = int(raw_rounds) if raw_rounds else 16  # پیش‌فرض ۱۶ در صورت خالی بودن
+
     context = {
         "plaintext": data.get("plaintext", "").strip(),
         "key": data.get("key", "").strip(),
         "iv": data.get("iv", "").strip(),
-        "rounds": int(data.get("rounds", 16)),
+        "rounds": rounds_value,
         "block_size": int(data.get("block_size", 64)),
         "key_length": int(data.get("key_length", 64)),
         "mode": data.get("mode", "CBC").upper(),
