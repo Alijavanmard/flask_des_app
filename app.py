@@ -1,8 +1,6 @@
-#`python
 # -----------------------------------------------
-# app.py — Final Stable Release For AliAkbar
-# رمزنگاری DES با پنج مود عملیاتی (ECB، CBC، CFB، OFB، CTR)
-# نسخه نهایی با UX ایمن‌تر و جلوگیری از ورودی‌های ناسازگار
+# app.py — Final DES Flask Application
+# نسخه با کنترل طول کلید بین 1 تا 7 کاراکتر (حداکثر 56 بیت)
 # -----------------------------------------------
 
 import os, re, traceback
@@ -13,17 +11,20 @@ from des.modes import ECB, CBC, CFB, OFB, CTR
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+
 # ---------------------- #
 # Helper Functions       #
 # ---------------------- #
 def is_ascii(s: str) -> bool:
     return bool(re.fullmatch(r"[ -~]*", s))  # printable ASCII range
 
+
 def error_response(context, msg, code=400, as_json=False):
     context["result"] = msg
     if as_json:
         return jsonify({"error": msg}), code
     return render_template("index.html", **context)
+
 
 # ---------------------- #
 # Home Route             #
@@ -46,6 +47,7 @@ def index():
     )
     return render_template("index.html", **context)
 
+
 # ---------------------- #
 # Process Route (POST)   #
 # ---------------------- #
@@ -53,10 +55,10 @@ def index():
 def process():
     data = request.get_json(force=True) if request.is_json else request.form
 
-    # ✅ پاک‌سازی ورودی دورها (رفع مشکل ^22، ٢٢ و ...)
+    # پاک‌سازی ورودی دورها
     raw_rounds = str(data.get("rounds", "16")).strip()
-    raw_rounds = re.sub(r"\D", "", raw_rounds)  # حذف هر کاراکتر غیرعددی
-    rounds_value = int(raw_rounds) if raw_rounds else 16  # پیش‌فرض ۱۶ در صورت خالی بودن
+    raw_rounds = re.sub(r"\D", "", raw_rounds)
+    rounds_value = int(raw_rounds) if raw_rounds else 16
 
     context = {
         "plaintext": data.get("plaintext", "").strip(),
@@ -70,9 +72,7 @@ def process():
         "result": "",
     }
 
-    # ---------------------- #
-    # ✳️ ورودی‌ها و اعتبارسنجی‌ها
-    # ---------------------- #
+    # ✳️ اعتبارسنجی ورودی‌ها
     for f in ["plaintext", "key", "iv"]:
         if not is_ascii(context[f]):
             return error_response(
@@ -88,16 +88,26 @@ def process():
     if not pt or not key:
         return error_response(context, "⚠️ متن یا کلید نمی‌تواند خالی باشد.", 400, request.is_json)
 
-    # محدود کردن BlockSize به 64 جهت DES
+    # ✅ محدودیت طول کلید به بازه‌ی 1 تا 7 کاراکتر (حداکثر 56 بیت)
+    key_len = len(key)
+    if key_len < 1 or key_len > 7:
+        return error_response(
+            context,
+            "⚠️ طول کلید باید بین ۱ تا ۷ کاراکتر (حداکثر ۵۶ بیت) باشد.",
+            400,
+            request.is_json,
+        )
+
+    # برای DES طول بلاک ۶۴ بیت است
     context["block_size"] = 64
 
-    # محدودکردن Roundها
+    # محدود کردن Roundها بین 8 تا 32
     if rounds < 8:
         context["rounds"] = 8
     elif rounds > 32:
         context["rounds"] = 32
 
-    # بررسی طول IV در حالت‌هایی که نیاز است
+    # بررسی طول IV
     needs_iv = mode in ("CBC", "CFB", "OFB", "CTR")
     if needs_iv:
         if not iv or len(iv) != 8:
@@ -105,12 +115,10 @@ def process():
                 context, "⚠️ طول IV باید دقیقاً ۸ کاراکتر باشد.", 400, request.is_json
             )
     else:
-        iv = None  # برای ECB حذف می‌شود
+        iv = None
 
     try:
         des_engine = DES(key.encode(), iv=iv.encode() if iv else None, mode=mode)
-
-        # انتخاب مود
         mode_map = {"ECB": ECB, "CBC": CBC, "CFB": CFB, "OFB": OFB, "CTR": CTR}
         ctx = mode_map[mode](des_engine)
 

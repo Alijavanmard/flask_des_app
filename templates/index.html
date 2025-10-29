@@ -21,7 +21,7 @@ button#copyOutput{background:#21a179}
 button#copyOutput:hover{background:#1a8c68}
 footer{text-align:center;color:#777;margin-top:2rem;font-size:0.83rem}
 @media(max-width:620px){.container{margin:1rem;padding:1.3rem}}
-#iv{text-align:left;direction:ltr;} /* IV چپ‌به‌راست */
+#iv{text-align:left;direction:ltr;}
 </style>
 </head>
 
@@ -48,22 +48,18 @@ footer{text-align:center;color:#777;margin-top:2rem;font-size:0.83rem}
     <div class="hint" id="hint-block">طول بلوک باید عددی زوج و متناسب با متن باشد.</div>
     <div class="error-text" id="error-block"></div>
 
-    <!-- Key length -->
-    <label for="key_length">🔑 طول کلید (Key Length)</label>
-    <select id="key_length" name="key_length">
-      <option value="8"   {{ 'selected' if key_length==8 }}>8</option>
-      <option value="16"  {{ 'selected' if key_length==16 }}>16</option>
-      <option value="32"  {{ 'selected' if key_length==32 }}>32</option>
-      <option value="64"  {{ 'selected' if key_length==64 }}>64</option>
-      <option value="128" {{ 'selected' if key_length==128 }}>128</option>
-    </select>
-    <div class="hint" id="hint-keylen">هر ۸ بیت = ۱ کاراکتر، مثلاً برای ۶۴ بیت باید ۸ کاراکتر باشد.</div>
-    <div class="error-text" id="error-keylen"></div>
-
     <!-- Key -->
-    <label for="key">🔒 مقدار کلید (Key)</label>
-    <input type="text" id="key" name="key" value="{{ key }}" required />
-    <div class="hint" id="key-hint">کلید باید متناسب با طول کلید انتخاب‌شده باشد.</div>
+    <label for="key">🔒 کلید DES (Key)</label>
+    <input 
+      type="text" id="key" name="key"
+      value="{{ key }}"
+      required
+      maxlength="7"
+      pattern=".{1,7}"
+      title="طول کلید باید بین ۱ تا ۷ کاراکتر (حداکثر ۵۶ بیت) باشد."
+      placeholder="کلید را وارد کنید (۱ تا ۷ کاراکتر)"
+    />
+    <div class="hint" id="key-hint">کلید می‌تواند از ۱ تا ۷ کاراکتر باشد (DES = ۵۶ بیت مؤثر).</div>
     <div class="error-text" id="error-key"></div>
 
     <!-- IV -->
@@ -119,12 +115,11 @@ const fields={
   key:document.getElementById('key'),
   iv:document.getElementById('iv'),
   rounds:document.getElementById('rounds'),
-  keyLength:document.getElementById('key_length'),
   block:document.getElementById('block_size'),
   mode:document.getElementById('mode')
 };
 
-// ✳️ جلوگیری از تایپ / چسباندن فارسی در تمام فیلدها
+// جلوگیری از ورود حروف فارسی
 ['plaintext','key','iv'].forEach(id=>{
   const el=fields[id];
   el.addEventListener('keypress',e=>{if(!asciiRegex.test(e.key)) e.preventDefault();});
@@ -134,121 +129,39 @@ const fields={
   });
 });
 
-// ✳️ پیشنهاد خودکار متناسب با طول متن و بلوک
+// محدودیت طول کلید بین ۱ تا ۷
+fields.key.addEventListener('input',()=>{
+  const val=fields.key.value;
+  if(val.length>7){fields.key.value=val.slice(0,7);}
+});
+
+// پیشنهاد اندازه بلوک
 fields.plaintext.addEventListener('input',()=>{
   const len=fields.plaintext.value.length;
   const hint=document.getElementById('hint-block');
   if(len>0){
-    let nearest=[8,16,32,64,128].find(v=>v>=len*8) || 128;
-    hint.innerText=`طول متن شما ${len} کاراکتر است. پیشنهاد می‌شود بلوک ${nearest} انتخاب شود.`;
+    let nearest=[8,16,32,64,128].find(v=>v>=len*8)||128;
+    hint.innerText=`طول متن ${len} کاراکتر است → پیشنهاد بلوک ${nearest}.`;
   } else hint.innerText="طول بلوک باید عددی زوج و متناسب با متن باشد.";
 });
 
-// ✳️ پیشنهاد خودکار براساس طول کلید
-fields.key.addEventListener('input',()=>{
-  const bits=parseInt(fields.keyLength.value);
-  const need=bits/8;
-  const cur=fields.key.value.length;
-  const hint=document.getElementById('hint-keylen');
-  if(cur!==need){
-    hint.innerText=`کلید فعلی ${cur} کاراکتر است اما باید ${need} کاراکتر باشد.`;
-  } else {hint.innerText=`✅ طول کلید مناسب (${need} کاراکتر).`;}
-});
-// جلوگیری از ورود بیشتر از حد مجاز طول کلید
-fields.key.addEventListener('input',()=>{
-  const bits=parseInt(fields.keyLength.value);
-  const need=bits/8;
-  if(fields.key.value.length>need){
-    fields.key.value=fields.key.value.substring(0,need);
-  }
-});
-
-// ✳️ کنترل IV بر اساس mode
-fields.mode.addEventListener('change',()=>{
-  const mode=fields.mode.value;
-  const hintIv=document.getElementById('hint-iv');
-  const lblIv=document.querySelector('label[for="iv"]');
-  if(mode==='ECB'){
-    fields.iv.disabled=true;
-    fields.iv.value='';
-    lblIv.style.opacity='0.5';
-    hintIv.innerText='در حالت ECB نیازی به IV وجود ندارد و ورود ممنوع است.';
-  } else if(mode==='CTR'){
-    fields.iv.disabled=false;
-    lblIv.style.opacity='1';
-    hintIv.innerHTML='در حالت CTR از شمارنده (Counter) استفاده می‌شود. طول آن باید برابر (Block Size ÷ 8) باشد.';
-  } else {
-    fields.iv.disabled=false;
-    lblIv.style.opacity='1';
-    hintIv.innerText='در حالت‌های CBC، CFB، OFB لازم است. طول IV باید برابر با (Block Size ÷ 8) باشد.';
-  }
-});
-
-// ✳️ کنترل IV هنگام تایپ
-fields.iv.addEventListener('input',()=>{
-  const blockBits=parseInt(fields.block.value);
-  const need=blockBits/8;
-  const val=fields.iv.value;
-  if(!asciiRegex.test(val)){
-    setError('error-iv','IV فقط باید شامل حروف و اعداد انگلیسی باشد.');
-  }else if(val.length!==need){
-    setError('error-iv',`طول IV باید ${need} کاراکتر باشد (فعلی ${val.length}).`);
-  } else clearError('error-iv');
-});
-
-// ✳️ کنترل محدوده rounds
-fields.rounds.addEventListener('input',()=>{
-  let val=parseInt(fields.rounds.value);
-  const hint=document.getElementById('hint-rounds');
-  if(val<8){fields.rounds.value=8; val=8;}
-  if(val>32){fields.rounds.value=32; val=32;}
-  hint.innerText=`تعداد دورها تنظیم شد روی ${val}. (بازهٔ مجاز ۸ تا ۳۲ است)`;
-});
-
-// توابع از قبل موجود:
-function setError(id,msg){const el=document.getElementById(id);el.innerText=msg;el.style.display='block';}
-function clearError(id){document.getElementById(id).style.display='none';}
-
-function validateAsciiField(fld,errId,label){
-  if(!asciiRegex.test(fld.value)){
-    fld.classList.add('invalid');setError(errId,`${label} باید فقط انگلیسی باشد.`);return false;
-  }fld.classList.remove('invalid');clearError(errId);return true;
-}
-function validateKeyLength(){
-  const bits=parseInt(fields.keyLength.value);
-  const need=bits/8;
-  const cur=fields.key.value.length;
-  if(cur!==need){setError('error-key',`طول کلید باید ${need} کاراکتر باشد (فعلی ${cur}).`);return false;}
-  clearError('error-key');return true;
-}
-function validateIV(){
-  const mode=fields.mode.value;
-  if(mode==='ECB') return true;
-  const blockBits=parseInt(fields.block.value);
-  const need=blockBits/8;
-  const val=fields.iv.value.trim();
-  if(!asciiRegex.test(val)){setError('error-iv','IV فقط باید انگلیسی باشد.');return false;}
-  if(val.length!==need){setError('error-iv',`طول IV باید ${need} کاراکتر باشد (فعلی ${val.length}).`);return false;}
-  clearError('error-iv');return true;
-}
-
-// ✳️ معتبرسازی و ارسال نهایی
 function submitForm(operation){
-  const valid=
-    validateAsciiField(fields.plaintext,'error-plaintext','متن') &&
-    validateKeyLength() &&
-    validateIV();
-  if(!valid){alert('❌ لطفاً خطاها را برطرف کنید.');return;}
+  if(fields.key.value.length<1||fields.key.value.length>7){
+    alert("❌ طول کلید باید بین ۱ تا ۷ کاراکتر باشد (حداکثر ۵۶ بیت).");
+    fields.key.focus();
+    return;
+  }
   const opInput=document.createElement('input');
   opInput.type='hidden';opInput.name='operation';opInput.value=operation;
-  form.appendChild(opInput);form.submit();
+  form.appendChild(opInput);
+  form.submit();
 }
 
-// دکمه کپی نتیجه
 document.getElementById('copyOutput').addEventListener('click',async()=>{
   await navigator.clipboard.writeText(document.getElementById('result').value);
   const msg=document.getElementById('copyMessage');
-  msg.innerText="✅ نتیجه کپی شد!";setTimeout(()=>msg.innerText="",3000);
+  msg.innerText="✅ نتیجه کپی شد!";
+  setTimeout(()=>msg.innerText="",3000);
 });
 </script>
 </body>
